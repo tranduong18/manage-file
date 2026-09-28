@@ -9,7 +9,7 @@ import lombok.*;
 @Builder
 public class ErrorResponse {
     private long timestamp;
-    private int status;
+    private int code;
     private String error;
     private String message;
     private String path;

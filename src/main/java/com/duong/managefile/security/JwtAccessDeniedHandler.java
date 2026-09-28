@@ -33,7 +33,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         ErrorCode errorCode = ErrorCode.ACCESS_DENIED;
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(System.currentTimeMillis())
-                .status(errorCode.getCode())
+                .code(errorCode.getCode())
                 .error(errorCode.getHttpStatus().getReasonPhrase())
                 .message(errorCode.getMessage())
                 .path(request.getRequestURI())

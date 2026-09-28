@@ -11,6 +11,9 @@ public enum ErrorCode {
     ACCESS_DENIED(1002, "Access denied", HttpStatus.FORBIDDEN),
     INTERNAL_SERVER_ERROR(1003, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR),
     BAD_REQUEST(1004, "Bad request", HttpStatus.BAD_REQUEST),
+    NOT_FOUND(1005, "Resource not found", HttpStatus.NOT_FOUND),
+    METHOD_NOT_ALLOWED(1006, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED),
+    DATA_INTEGRITY_VIOLATION(1007, "Data conflict or constraint violation", HttpStatus.CONFLICT),
 
     USER_NOT_FOUND(2001, "User not found", HttpStatus.NOT_FOUND);
 

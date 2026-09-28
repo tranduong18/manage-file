@@ -7,7 +7,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
 
   security:
@@ -23,11 +23,14 @@ spring:
               - email
               - https://www.googleapis.com/auth/drive.file
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
-        provider:
-          google:
-            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
-            token-uri: https://oauth2.googleapis.com/token
-            user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
 
 jwt:
   secret-key: ${JWT_SECRET_KEY}
+
+app:
+  encryption:
+    password: ${APP_ENCRYPTION_PASSWORD}
+    salt: ${APP_ENCRYPTION_SALT}
+  frontend:
+    origin: http://localhost:3000
+    redirect-url: http://localhost:3000/oauth2/callback
