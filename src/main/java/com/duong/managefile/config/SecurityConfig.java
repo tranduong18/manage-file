@@ -1,6 +1,5 @@
 package com.duong.managefile.config;
 
-import com.duong.managefile.security.CustomOauth2SuccessHandler;
 import com.duong.managefile.security.JwtAccessDeniedHandler;
 import com.duong.managefile.security.JwtAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
@@ -13,9 +12,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
-import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -42,14 +38,13 @@ public class SecurityConfig {
 
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
-    private final CustomOauth2SuccessHandler customOauth2SuccessHandler;
 
     private static final String[] PUBLIC_ENDPOINTS = {
-            "/", "/error", "/login/**", "/oauth2/**", "/actuator/health"
+            "/", "/error", "/actuator/health", "/api/auth/google"
     };
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, ClientRegistrationRepository clientRegistrationRepository) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -57,15 +52,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
-                .oauth2Login(oauth2 -> oauth2
-                        .authorizationEndpoint(auth -> auth
-                                .authorizationRequestResolver(
-                                        authorizationRequestResolver(clientRegistrationRepository)))
-                        .successHandler(customOauth2SuccessHandler)
-                        .failureUrl("/login?error=true")
-                )
-                .oauth2ResourceServer(oath2 -> oath2
-                        .jwt(Customizer.withDefaults())
+                .oauth2ResourceServer(oath2 -> oath2.jwt(
+                        jwtConfigurer -> jwtConfigurer
+                                .decoder(jwtDecoder()))
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
@@ -91,15 +80,5 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
-    }
-
-    private OAuth2AuthorizationRequestResolver authorizationRequestResolver(ClientRegistrationRepository clientRegistrationRepository) {
-        DefaultOAuth2AuthorizationRequestResolver resolver = new DefaultOAuth2AuthorizationRequestResolver(clientRegistrationRepository, "/oauth2/authorization");
-        resolver.setAuthorizationRequestCustomizer(customizer ->
-                customizer.additionalParameters(params -> {
-                    params.put("access_type", "offline");
-                    params.put("prompt", "consent");
-                }));
-        return resolver;
     }
 }

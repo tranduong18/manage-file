@@ -10,19 +10,12 @@ spring:
       ddl-auto: validate
     show-sql: true
 
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
-            scope:
-              - openid
-              - profile
-              - email
-              - https://www.googleapis.com/auth/drive.file
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+oauth:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_REDIRECT_URL}
+    scope: "openid email profile https://www.googleapis.com/auth/drive.file"
 
 jwt:
   secret-key: ${JWT_SECRET_KEY}
@@ -33,4 +26,3 @@ app:
     salt: ${APP_ENCRYPTION_SALT}
   frontend:
     origin: http://localhost:3000
-    redirect-url: http://localhost:3000/oauth2/callback
