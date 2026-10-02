@@ -22,13 +22,14 @@ public class JwtService {
     @Value("${jwt.secret-key}")
     private String secretKey;
 
-    public String generateAccessToken(String email){
+    public String generateAccessToken(String userId, String email){
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS256);
 
         Date issueTime = new Date();
         Date expirationTime = Date.from(issueTime.toInstant().plus(15, ChronoUnit.MINUTES));
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
-                .subject(email)
+                .subject(userId)
+                .claim("email", email)
                 .issueTime(issueTime)
                 .expirationTime(expirationTime)
                 .jwtID(UUID.randomUUID().toString())

@@ -15,7 +15,10 @@ public enum ErrorCode {
     METHOD_NOT_ALLOWED(1006, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED),
     DATA_INTEGRITY_VIOLATION(1007, "Data conflict or constraint violation", HttpStatus.CONFLICT),
 
-    USER_NOT_FOUND(2001, "User not found", HttpStatus.NOT_FOUND);
+    USER_NOT_FOUND(2001, "User not found", HttpStatus.NOT_FOUND),
+
+    GOOGLE_TOKEN_EXPIRED(3001, "Google access token expired", HttpStatus.UNAUTHORIZED),
+    GOOGLE_CLIENT_BUILD_FAILED(3002, "Failed to build Google Drive client", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
     private final String message;

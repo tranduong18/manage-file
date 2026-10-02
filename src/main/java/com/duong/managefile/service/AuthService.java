@@ -74,7 +74,7 @@ public class AuthService {
         googleAccount.setScopes(token.scope() != null ? token.scope() : props.scope());
         googleAccountRepository.save(googleAccount);
 
-        String jwt = jwtService.generateAccessToken(info.email());
+        String jwt = jwtService.generateAccessToken(savedUser.getId(), info.email());
         return LoginResponse.builder()
                 .accessToken(jwt)
                 .tokenType("Bearer")
