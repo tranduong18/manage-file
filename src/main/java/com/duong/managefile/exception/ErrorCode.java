@@ -25,7 +25,10 @@ public enum ErrorCode {
     USER_NOT_FOUND(3001, "User not found", HttpStatus.NOT_FOUND),
 
     // Google Account
-    GOOGLE_ACCOUNT_NOT_FOUND(4001, "Google Account not found", HttpStatus.NOT_FOUND);
+    GOOGLE_ACCOUNT_NOT_FOUND(4001, "Google Account not found", HttpStatus.NOT_FOUND),
+
+    // File
+    FILE_NOT_FOUND(5001, "File not found", HttpStatus.NOT_FOUND);
 
     private final int code;
     private final String message;

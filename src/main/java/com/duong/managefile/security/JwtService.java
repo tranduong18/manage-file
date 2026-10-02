@@ -26,7 +26,7 @@ public class JwtService {
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS256);
 
         Date issueTime = new Date();
-        Date expirationTime = Date.from(issueTime.toInstant().plus(15, ChronoUnit.MINUTES));
+        Date expirationTime = Date.from(issueTime.toInstant().plus(30, ChronoUnit.MINUTES));
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
                 .subject(userId)
                 .claim("email", email)
