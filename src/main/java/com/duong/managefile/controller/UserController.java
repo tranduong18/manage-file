@@ -18,7 +18,8 @@ public class UserController {
 
     @GetMapping("/me")
     public ApiResponse<UserDetailResponse> getUserDetail(@AuthenticationPrincipal Jwt jwt){
-        UserDetailResponse data = userService.getUserDetail(jwt.getSubject());
+        String userId = jwt.getSubject();
+        UserDetailResponse data = userService.getUserDetail(userId);
         return ApiResponse.<UserDetailResponse>builder()
                 .status("success")
                 .data(data)

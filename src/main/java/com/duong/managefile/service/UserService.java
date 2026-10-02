@@ -17,8 +17,8 @@ public class UserService {
     private final UserRepository userRepository;
 
     @Transactional
-    public UserDetailResponse getUserDetail(String email){
-        User user = userRepository.findByEmail(email)
+    public UserDetailResponse getUserDetail(String userId){
+        User user = userRepository.findUserById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         return UserDetailResponse.builder()
                 .id(user.getId())

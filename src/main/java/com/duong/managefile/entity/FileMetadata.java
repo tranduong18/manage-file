@@ -7,13 +7,13 @@ import lombok.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "files")
+@Table(name = "file_metadata")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class File {
+public class FileMetadata {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;

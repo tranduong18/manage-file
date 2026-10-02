@@ -52,7 +52,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oath2 -> oath2.jwt(
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(
                         jwtConfigurer -> jwtConfigurer
                                 .decoder(jwtDecoder()))
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
