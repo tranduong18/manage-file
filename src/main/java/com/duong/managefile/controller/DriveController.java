@@ -2,11 +2,9 @@ package com.duong.managefile.controller;
 
 import com.duong.managefile.dto.request.CreateFolderRequest;
 import com.duong.managefile.dto.request.MoveFileRequest;
+import com.duong.managefile.dto.request.PickedFileRequest;
 import com.duong.managefile.dto.request.RenameRequest;
-import com.duong.managefile.dto.response.ApiResponse;
-import com.duong.managefile.dto.response.FileResponse;
-import com.duong.managefile.dto.response.FolderResponse;
-import com.duong.managefile.dto.response.PageResponse;
+import com.duong.managefile.dto.response.*;
 import com.duong.managefile.service.DriveService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -133,5 +131,26 @@ public class DriveController {
             @RequestParam(defaultValue = "20") int size
     ){
         return driveService.getFolderTree(jwt.getSubject(), parentGoogleId, page, size);
+    }
+
+    // Picker config
+    @GetMapping("/picker/config")
+    public ApiResponse<PickerConfigResponse> pickerConfig(@AuthenticationPrincipal Jwt jwt){
+        PickerConfigResponse data = driveService.getPickerConfig(jwt.getSubject());
+        return ApiResponse.<PickerConfigResponse>builder()
+                .status("success")
+                .data(data)
+                .build();
+    }
+
+    // Save picked file
+    @PostMapping("/picker/picked")
+    public ApiResponse<Object> picked(@AuthenticationPrincipal Jwt jwt, @RequestBody PickedFileRequest request){
+        Object data = driveService.savePicked(jwt.getSubject(), request);
+        return ApiResponse.builder()
+                .status("success")
+                .data(data)
+                .message("Picked file successfully")
+                .build();
     }
 }

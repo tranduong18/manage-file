@@ -17,6 +17,10 @@ oauth:
     redirect-uri: ${GOOGLE_REDIRECT_URL}
     scope: "openid email profile https://www.googleapis.com/auth/drive.file"
 
+    picker:
+      api-key: ${GOOGLE_PICKER_API_KEY}
+      app-id: ${GOOGLE_PROJECT_NUMBER}
+
 jwt:
   secret-key: ${JWT_SECRET_KEY}
 

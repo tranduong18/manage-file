@@ -4,9 +4,11 @@ import com.duong.managefile.client.DriveClientFactory;
 import com.duong.managefile.common.FileSource;
 import com.duong.managefile.common.FolderSource;
 import com.duong.managefile.dto.request.CreateFolderRequest;
+import com.duong.managefile.dto.request.PickedFileRequest;
 import com.duong.managefile.dto.response.FileResponse;
 import com.duong.managefile.dto.response.FolderResponse;
 import com.duong.managefile.dto.response.PageResponse;
+import com.duong.managefile.dto.response.PickerConfigResponse;
 import com.duong.managefile.entity.FileMetadata;
 import com.duong.managefile.entity.Folder;
 import com.duong.managefile.entity.GoogleAccount;
@@ -26,6 +28,7 @@ import com.google.api.services.drive.model.File;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +49,14 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j(topic = "DRIVE-SERVICE")
 public class DriveService {
+    @Value("${oauth.google.picker.api-key}")
+    private String pickerApiKey;
+
+    @Value("${oauth.google.picker.app-id}")
+    private String pickerAppId;
+
+    private static final String DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
     private final DriveClientFactory driveClientFactory;
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
@@ -53,6 +64,7 @@ public class DriveService {
     private final GoogleAccountRepository googleAccountRepository;
     private final FolderMapper folderMapper;
     private final FileMapper fileMapper;
+    private final TokenEncryptionService tokenEncryptionService;
 
     // Create folder
     @Transactional
@@ -276,6 +288,61 @@ public class DriveService {
                 .build();
     }
 
+    // Get picker config
+    @Transactional(readOnly = true)
+    public PickerConfigResponse getPickerConfig(String userId){
+        GoogleAccount account = googleAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.GOOGLE_ACCOUNT_NOT_FOUND));
+
+        String rawAccessToken = tokenEncryptionService.decrypt(account.getAccessTokenEnc());
+
+        return PickerConfigResponse.builder()
+                .accessToken(rawAccessToken)
+                .apiKey(pickerApiKey)
+                .appId(pickerAppId)
+                .scope(DRIVE_FILE_SCOPE)
+                .build();
+    }
+
+    // Save picked file
+    @Transactional
+    public Object savePicked(String userId, PickedFileRequest request){
+        User user = getUser(userId);
+
+        if(request.isFolder()){
+            Folder folder = folderRepository.findByUserAndGoogleFolderId(userId, request.googleFileId())
+                    .orElseGet(Folder::new);
+            folder.setUser(user);
+            folder.setGoogleFolderId(request.googleFileId());
+            folder.setName(request.fileName());
+            folder.setParentGoogleId(request.parentFolderId());
+            folder.setSource(FolderSource.PICKED);
+            folderRepository.save(folder);
+
+            return FolderResponse.builder()
+                    .id(folder.getId())
+                    .name(folder.getName())
+                    .parentGoogleId(folder.getParentGoogleId())
+                    .googleFolderId(folder.getGoogleFolderId())
+                    .source(folder.getSource().name())
+                    .build();
+        }
+        else{
+            FileMetadata file = fileRepository.findByUserAndGoogleFileId(userId, request.googleFileId())
+                    .orElseGet(FileMetadata::new);
+            file.setUser(user);
+            file.setGoogleFileId(request.googleFileId());
+            file.setFileName(request.fileName());
+            file.setMimeType(request.mimeType());
+            file.setSizeBytes(request.sizeBytes());
+            file.setParentFolderId(request.parentFolderId());
+            file.setSource(FileSource.PICKED);
+            file.setDeleted(false);
+            fileRepository.save(file);
+
+            return fileMapper.toFileResponse(file);
+        }
+    }
 
     private User getUser(String userId){
         return userRepository.findById(userId)
