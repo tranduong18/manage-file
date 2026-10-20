@@ -37,6 +37,7 @@ CREATE TABLE file_metadata (
        mime_type         VARCHAR(255),
        size_bytes        BIGINT,
        parent_folder_id  VARCHAR(128),
+
        thumbnail_link    TEXT,
        web_view_link     TEXT,
        source            VARCHAR(16)  NOT NULL DEFAULT 'UPLOADED',

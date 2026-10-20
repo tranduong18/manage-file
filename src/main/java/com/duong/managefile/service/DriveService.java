@@ -35,6 +35,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
@@ -126,6 +127,23 @@ public class DriveService {
         return fileMapper.toFileResponse(fileMetadata);
     }
 
+    // Refresh thumbnail
+    @Transactional
+    public FileResponse refreshThumbnail(String userId, String fileId){
+        FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+
+        File f = driveExecutor.execute(userId, drive ->
+                drive.files().get(file.getGoogleFileId())
+                        .setFields("thumbnailLink, webViewLink")
+                        .execute());
+
+        file.setThumbnailLink(f.getThumbnailLink());
+        file.setWebViewLink(f.getWebViewLink());
+        fileRepository.save(file);
+        return fileMapper.toFileResponse(file);
+    }
+
     // Get file detail
     @Transactional(readOnly = true)
     public FileResponse getFile(String userId, String fileId){
@@ -157,11 +175,14 @@ public class DriveService {
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
-        File fileDrive = new File();
-        fileDrive.setTrashed(true);
+        if(file.getSource() != FileSource.PICKED){
+            File fileDrive = new File();
+            fileDrive.setTrashed(true);
 
-        driveExecutor.execute(userId, drive ->
-                drive.files().update(file.getGoogleFileId(), fileDrive).execute());
+            driveExecutor.execute(userId, drive ->
+                    drive.files().update(file.getGoogleFileId(), fileDrive).execute());
+        }
+
         file.setDeleted(true);
         fileRepository.save(file);
     }
@@ -189,17 +210,20 @@ public class DriveService {
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
+        boolean toRoot = !StringUtils.hasText(targetFolderId) || "root".equalsIgnoreCase(targetFolderId);
+        String driveTarget = toRoot ? "root" : targetFolderId;
+
         driveExecutor.execute(userId, drive -> {
             File current = drive.files().get(file.getGoogleFileId()).setFields("parents").execute();
             var update = drive.files().update(file.getGoogleFileId(), null)
-                    .setAddParents(targetFolderId)
+                    .setAddParents(driveTarget)
                     .setFields("id, parents");
             if (current.getParents() != null && !current.getParents().isEmpty()) {
                 update.setRemoveParents(String.join(",", current.getParents()));
             }
             return update.execute();
         });
-        file.setParentFolderId(targetFolderId);
+        file.setParentFolderId(toRoot ? null : targetFolderId);
         fileRepository.save(file);
 
         return fileMapper.toFileResponse(file);
@@ -235,10 +259,12 @@ public class DriveService {
         if(page <= 0) page = 1;
         if(size <= 0 || size > 20) size = 20;
 
+        boolean filtering = StringUtils.hasText(name) || StringUtils.hasText(mimeType);
+
         Specification<FileMetadata> fileSpecification = Specification.allOf(
                 FileSpecification.belongsToUser(userId),
                 FileSpecification.notDeleted(),
-                FileSpecification.inFolder(parentFolderId),
+                filtering ? null : FileSpecification.inFolder(parentFolderId),
                 FileSpecification.hasMimeType(mimeType),
                 FileSpecification.hasName(name)
         );
@@ -274,13 +300,18 @@ public class DriveService {
     public Object savePicked(String userId, PickedFileRequest request){
         User user = getUser(userId);
 
+        String parent = StringUtils.hasText(request.parentFolderId())
+                && !"root".equalsIgnoreCase(request.parentFolderId())
+                ? request.parentFolderId()
+                : null;
+
         if(request.isFolder()){
             Folder folder = folderRepository.findByUserAndGoogleFolderId(userId, request.googleFileId())
                     .orElseGet(Folder::new);
             folder.setUser(user);
             folder.setGoogleFolderId(request.googleFileId());
             folder.setName(request.fileName());
-            folder.setParentGoogleId(request.parentFolderId());
+            folder.setParentGoogleId(parent);
             folder.setSource(FolderSource.PICKED);
             folderRepository.save(folder);
 
@@ -293,14 +324,21 @@ public class DriveService {
                     .build();
         }
         else{
+            File driveFile = driveExecutor.execute(userId, drive ->
+                    drive.files().get(request.googleFileId())
+                            .setFields("id, name, mimeType, size, webViewLink, thumbnailLink")
+                            .execute());
+
             FileMetadata file = fileRepository.findByUserAndGoogleFileId(userId, request.googleFileId())
                     .orElseGet(FileMetadata::new);
             file.setUser(user);
             file.setGoogleFileId(request.googleFileId());
-            file.setFileName(request.fileName());
-            file.setMimeType(request.mimeType());
-            file.setSizeBytes(request.sizeBytes());
-            file.setParentFolderId(request.parentFolderId());
+            file.setFileName(driveFile.getName() != null ? driveFile.getName() : request.fileName());
+            file.setMimeType(driveFile.getMimeType() != null ? driveFile.getMimeType() : request.mimeType());
+            file.setSizeBytes(driveFile.getSize() != null ? driveFile.getSize() : request.sizeBytes());
+            file.setWebViewLink(driveFile.getWebViewLink());
+            file.setThumbnailLink(driveFile.getThumbnailLink());
+            file.setParentFolderId(parent);
             file.setSource(FileSource.PICKED);
             file.setDeleted(false);
             fileRepository.save(file);

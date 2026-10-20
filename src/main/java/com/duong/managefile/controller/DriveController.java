@@ -52,6 +52,21 @@ public class DriveController {
                 .build();
     }
 
+    // Refresh thumbnail
+    @PostMapping("/files/{id}/refresh-thumbnail")
+    public ApiResponse<FileResponse> refreshThumbnail(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable String id
+    ){
+        String userId = jwt.getSubject();
+        FileResponse data = driveService.refreshThumbnail(userId, id);
+        return ApiResponse.<FileResponse>builder()
+                .status("success")
+                .data(data)
+                .message("Refresh thumbnail successfully")
+                .build();
+    }
+
     // List files
     @GetMapping("/files")
     public PageResponse<FileResponse> listFiles(

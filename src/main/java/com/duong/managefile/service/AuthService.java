@@ -48,7 +48,6 @@ public class AuthService {
 
         GoogleUserInfoResponse info = googleUserInfoClient.getUserInfo("Bearer " + token.accessToken());
 
-        // Chống chiếm tài khoản bằng email chưa xác minh
         if (!info.emailVerified()) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
