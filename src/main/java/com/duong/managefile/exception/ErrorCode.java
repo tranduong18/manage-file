@@ -20,6 +20,8 @@ public enum ErrorCode {
     GOOGLE_TOKEN_EXPIRED(2001, "Google access token expired", HttpStatus.UNAUTHORIZED),
     GOOGLE_CLIENT_BUILD_FAILED(2002, "Failed to build Google Drive client", HttpStatus.INTERNAL_SERVER_ERROR),
     DRIVE_API_ERROR(2003, "Google Drive API error", HttpStatus.BAD_GATEWAY),
+    GOOGLE_REAUTH_REQUIRED(2004, "Google re-authentication required", HttpStatus.UNAUTHORIZED),
+    GOOGLE_REFRESH_FAILED(2005, "Failed to refresh Google access token", HttpStatus.BAD_GATEWAY),
 
     // User
     USER_NOT_FOUND(3001, "User not found", HttpStatus.NOT_FOUND),

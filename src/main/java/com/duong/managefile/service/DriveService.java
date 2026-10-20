@@ -1,6 +1,6 @@
 package com.duong.managefile.service;
 
-import com.duong.managefile.client.DriveClientFactory;
+import com.duong.managefile.client.DriveExecutor;
 import com.duong.managefile.common.FileSource;
 import com.duong.managefile.common.FolderSource;
 import com.duong.managefile.dto.request.CreateFolderRequest;
@@ -11,7 +11,6 @@ import com.duong.managefile.dto.response.PageResponse;
 import com.duong.managefile.dto.response.PickerConfigResponse;
 import com.duong.managefile.entity.FileMetadata;
 import com.duong.managefile.entity.Folder;
-import com.duong.managefile.entity.GoogleAccount;
 import com.duong.managefile.entity.User;
 import com.duong.managefile.exception.AppException;
 import com.duong.managefile.exception.ErrorCode;
@@ -19,11 +18,9 @@ import com.duong.managefile.mapper.FileMapper;
 import com.duong.managefile.mapper.FolderMapper;
 import com.duong.managefile.repository.FileRepository;
 import com.duong.managefile.repository.FolderRepository;
-import com.duong.managefile.repository.GoogleAccountRepository;
 import com.duong.managefile.repository.UserRepository;
 import com.duong.managefile.repository.specification.FileSpecification;
 import com.google.api.client.http.InputStreamContent;
-import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.model.File;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +37,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
@@ -57,20 +53,18 @@ public class DriveService {
 
     private static final String DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
-    private final DriveClientFactory driveClientFactory;
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
-    private final GoogleAccountRepository googleAccountRepository;
     private final FolderMapper folderMapper;
     private final FileMapper fileMapper;
-    private final TokenEncryptionService tokenEncryptionService;
+    private final DriveExecutor driveExecutor;
+    private final GoogleTokenService googleTokenService;
 
     // Create folder
     @Transactional
     public FolderResponse createFolder(String userId, CreateFolderRequest request){
         User user = getUser(userId);
-        Drive drive = buildDriveClient(userId);
 
         File metadata = new File();
         metadata.setName(request.name());
@@ -79,14 +73,9 @@ public class DriveService {
             metadata.setParents(Collections.singletonList(request.parentGoogleId()));
         }
 
-        File createdFile;
-        try {
-            createdFile = drive.files().create(metadata)
-                    .setFields("id, name, parents")
-                    .execute();
-        } catch (IOException e) {
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+        File createdFile = driveExecutor.execute(userId, drive ->
+                drive.files().create(metadata).setFields("id, name, parents").execute()
+        );
 
         Folder folder = Folder.builder()
                 .user(user)
@@ -104,7 +93,6 @@ public class DriveService {
     @Transactional
     public FileResponse uploadFile(String userId, MultipartFile file, String parentFolderId){
         User user = getUser(userId);
-        Drive drive = buildDriveClient(userId);
 
         File metadata = new File();
         metadata.setName(file.getOriginalFilename());
@@ -112,17 +100,15 @@ public class DriveService {
             metadata.setParents(Collections.singletonList(parentFolderId));
         }
 
-        File uploadedFile;
-        try(var inputStream = file.getInputStream()) {
-            InputStreamContent mediaContent = new InputStreamContent(file.getContentType(), inputStream);
-            mediaContent.setLength(file.getSize());
-
-            uploadedFile = drive.files().create(metadata, mediaContent)
-                    .setFields("id, name, mimeType, size, parents, thumbnailLink, webViewLink")
-                    .execute();
-        } catch (IOException e){
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+        File uploadedFile = driveExecutor.execute(userId, drive -> {
+            try (var in = file.getInputStream()) {
+                InputStreamContent media = new InputStreamContent(file.getContentType(), in);
+                media.setLength(file.getSize());
+                return drive.files().create(metadata, media)
+                        .setFields("id, name, mimeType, size, parents, thumbnailLink, webViewLink")
+                        .execute();
+            }
+        });
 
         FileMetadata fileMetadata = FileMetadata.builder()
                 .user(user)
@@ -149,22 +135,20 @@ public class DriveService {
     }
 
     // Download file
-    @Transactional
     public void downloadFile(String userId, String fileId, HttpServletResponse response){
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
-        Drive drive = buildDriveClient(userId);
-
-        try {
-            response.setContentType(file.getMimeType() != null ? file.getMimeType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        driveExecutor.execute(userId, drive -> {
+            response.setContentType(file.getMimeType() != null
+                    ? file.getMimeType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
             response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
-                    ContentDisposition.attachment().filename(file.getFileName(), StandardCharsets.UTF_8)
-                    .build().toString());
-            drive.files().get(file.getGoogleFileId()).executeMediaAndDownloadTo(response.getOutputStream());
-        } catch (IOException e) {
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+                    ContentDisposition.attachment()
+                            .filename(file.getFileName(), StandardCharsets.UTF_8).build().toString());
+            drive.files().get(file.getGoogleFileId())
+                    .executeMediaAndDownloadTo(response.getOutputStream());
+            return null;
+        });
     }
 
     // Delete file
@@ -173,17 +157,13 @@ public class DriveService {
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
-        Drive drive = buildDriveClient(userId);
         File fileDrive = new File();
         fileDrive.setTrashed(true);
 
-        try {
-            drive.files().update(file.getGoogleFileId(), fileDrive).execute();
-            file.setDeleted(true);
-            fileRepository.save(file);
-        } catch (IOException e) {
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+        driveExecutor.execute(userId, drive ->
+                drive.files().update(file.getGoogleFileId(), fileDrive).execute());
+        file.setDeleted(true);
+        fileRepository.save(file);
     }
 
     // Rename file
@@ -192,18 +172,13 @@ public class DriveService {
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
-        Drive drive = buildDriveClient(userId);
         File fileDrive = new File();
         fileDrive.setName(newName);
 
-        try {
-            drive.files().update(file.getGoogleFileId(), fileDrive).setFields("id, name").execute();
-            file.setFileName(newName);
-            fileRepository.save(file);
-        } catch (IOException e) {
-            log.error("Error renaming file: {}", e.getMessage());
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+        driveExecutor.execute(userId, drive ->
+                drive.files().update(file.getGoogleFileId(), fileDrive).setFields("id, name").execute());
+        file.setFileName(newName);
+        fileRepository.save(file);
 
         return fileMapper.toFileResponse(file);
     }
@@ -214,23 +189,18 @@ public class DriveService {
         FileMetadata file = fileRepository.findByIdAndUser(fileId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
-        Drive drive = buildDriveClient(userId);
-
-        try {
-            File currentFile = drive.files().get(file.getGoogleFileId()).setFields("parents").execute();
-            String preParents = String.join(",", currentFile.getParents());
-
-            drive.files().update(file.getGoogleFileId(), null)
+        driveExecutor.execute(userId, drive -> {
+            File current = drive.files().get(file.getGoogleFileId()).setFields("parents").execute();
+            var update = drive.files().update(file.getGoogleFileId(), null)
                     .setAddParents(targetFolderId)
-                    .setRemoveParents(preParents)
-                    .setFields("id, parents")
-                    .execute();
-
-            file.setParentFolderId(targetFolderId);
-            fileRepository.save(file);
-        } catch (IOException e) {
-            throw new AppException(ErrorCode.DRIVE_API_ERROR);
-        }
+                    .setFields("id, parents");
+            if (current.getParents() != null && !current.getParents().isEmpty()) {
+                update.setRemoveParents(String.join(",", current.getParents()));
+            }
+            return update.execute();
+        });
+        file.setParentFolderId(targetFolderId);
+        fileRepository.save(file);
 
         return fileMapper.toFileResponse(file);
     }
@@ -291,13 +261,8 @@ public class DriveService {
     // Get picker config
     @Transactional(readOnly = true)
     public PickerConfigResponse getPickerConfig(String userId){
-        GoogleAccount account = googleAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.GOOGLE_ACCOUNT_NOT_FOUND));
-
-        String rawAccessToken = tokenEncryptionService.decrypt(account.getAccessTokenEnc());
-
         return PickerConfigResponse.builder()
-                .accessToken(rawAccessToken)
+                .accessToken(googleTokenService.getValidAccessToken(userId))
                 .apiKey(pickerApiKey)
                 .appId(pickerAppId)
                 .scope(DRIVE_FILE_SCOPE)
@@ -347,12 +312,5 @@ public class DriveService {
     private User getUser(String userId){
         return userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-    }
-
-    private Drive buildDriveClient(String userId){
-        GoogleAccount account = googleAccountRepository.findByUserId(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.GOOGLE_ACCOUNT_NOT_FOUND));
-
-        return driveClientFactory.build(account);
     }
 }

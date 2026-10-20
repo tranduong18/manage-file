@@ -78,13 +78,8 @@ public class DriveController {
 
     // Download file
     @GetMapping("/files/{id}/download")
-    public ApiResponse<Void> downloadFile(@AuthenticationPrincipal Jwt jwt, @PathVariable String id, HttpServletResponse response){
+    public void downloadFile(@AuthenticationPrincipal Jwt jwt, @PathVariable String id, HttpServletResponse response){
         driveService.downloadFile(jwt.getSubject(), id, response);
-
-        return ApiResponse.<Void>builder()
-                .status("success")
-                .message("Download file successfully")
-                .build();
     }
 
     // Rename file
