@@ -2,6 +2,7 @@ package com.duong.managefile.service;
 
 import com.duong.managefile.client.GoogleTokenClient;
 import com.duong.managefile.client.GoogleUserInfoClient;
+import com.duong.managefile.common.TokenType;
 import com.duong.managefile.config.GoogleOAuthProperties;
 import com.duong.managefile.dto.response.GoogleExchangeTokenResponse;
 import com.duong.managefile.dto.response.GoogleUserInfoResponse;
@@ -13,6 +14,8 @@ import com.duong.managefile.exception.ErrorCode;
 import com.duong.managefile.repository.GoogleAccountRepository;
 import com.duong.managefile.repository.UserRepository;
 import com.duong.managefile.security.JwtService;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jwt.SignedJWT;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 
+import java.text.ParseException;
 import java.time.Instant;
 
 @Service
@@ -73,11 +77,57 @@ public class AuthService {
         googleAccount.setScopes(token.scope() != null ? token.scope() : props.scope());
         googleAccountRepository.save(googleAccount);
 
-        String jwt = jwtService.generateAccessToken(savedUser.getId(), info.email());
+        String access = jwtService.generateAccessToken(savedUser.getId(), info.email());
+        String refresh = jwtService.generateRefreshToken(savedUser.getId(), savedUser.getTokenVersion());
         return LoginResponse.builder()
-                .accessToken(jwt)
+                .accessToken(access)
+                .refreshToken(refresh)
                 .tokenType("Bearer")
                 .build();
+    }
+
+    @Transactional
+    public LoginResponse refreshToken(String refreshToken){
+        try {
+            SignedJWT signedJWT = jwtService.validateToken(refreshToken, TokenType.REFRESH);
+            String userId = signedJWT.getJWTClaimsSet().getSubject();
+            String email = signedJWT.getJWTClaimsSet().getStringClaim("email");
+            Integer tokenVersion = signedJWT.getJWTClaimsSet().getIntegerClaim("version");
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new AppException(ErrorCode.UNAUTHORIZED));
+            if(user.getTokenVersion() != tokenVersion){
+                log.error("Refresh token failed: token version mismatch");
+                throw new AppException(ErrorCode.UNAUTHORIZED);
+            }
+
+            String accessToken = jwtService.generateAccessToken(userId, email);
+            return LoginResponse.builder()
+                    .accessToken(accessToken)
+                    .tokenType("Bearer")
+                    .build();
+        } catch (ParseException e){
+            log.error("Refresh token failed: {}", e.getMessage());
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    @Transactional
+    public void logout(String refreshToken){
+        try {
+            SignedJWT signedJWT = jwtService.validateToken(refreshToken, TokenType.REFRESH);
+            String userId = signedJWT.getJWTClaimsSet().getSubject();
+
+            User user = userRepository.findUserById(userId)
+                    .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+            user.setTokenVersion(user.getTokenVersion() + 1);
+            userRepository.save(user);
+
+            log.info("User {} logout", userId);
+        } catch (ParseException e) {
+            log.error("Logout failed: {}", e.getMessage());
+        }
     }
 
     private MultiValueMap<String, String> buildTokenRequest(String code) {
